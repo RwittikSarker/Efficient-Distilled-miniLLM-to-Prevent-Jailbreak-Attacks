@@ -22,6 +22,11 @@ def load_attack_model():
     print("Loading tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained(model_id)
     print("Tokenizer loaded.")
+    tokenizer.padding_side = "left"
+    tokenizer.truncation_side = "left"
+
+    if tokenizer.pad_token is None:
+      tokenizer.pad_token = tokenizer.eos_token
 
     print("Loading model (this may take a few minutes)...")
     model = AutoModelForCausalLM.from_pretrained(

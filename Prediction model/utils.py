@@ -5,7 +5,7 @@ class PromptDataset(Dataset):
     def __init__(self, dataframe, tokenizer, max_length=128):
         self.tokenizer = tokenizer
         self.texts = dataframe['prompt'].tolist()
-        self.labels = dataframe['harm_score'].tolist()
+        self.labels = dataframe['harmscore'].tolist()
         self.max_length = max_length
 
     def __len__(self):
