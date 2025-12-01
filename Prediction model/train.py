@@ -16,21 +16,10 @@ EPOCHS = 7
 BATCH_SIZE = 12
 LR = 1e-5
 
-#Load data and stratified split based on harm_score categories
-df = pd.read_csv('data.csv', encoding='utf-8-sig')  # columns: prompt, harm_score
-bins = [-0.1, 0.3, 0.6, 1.1]
-labels = ['low', 'mid', 'high']
-df['harm_category'] = pd.cut(df['harmscore'], bins=bins, labels=labels)
-
-
-train_df, val_df = train_test_split(
-    df,
-    test_size=0.1,
-    random_state=42,
-    stratify=df['harm_category']
-)
-train_df = train_df.drop(columns=['harm_category'])
-val_df = val_df.drop(columns=['harm_category'])
+# Load pre-split data
+print("Loading pre-split training and validation data...")
+train_df = pd.read_csv('train_data.csv', encoding='utf-8-sig')
+val_df = pd.read_csv('val_data.csv', encoding='utf-8-sig')
 
 
 # Tokenizer and datasets
@@ -132,4 +121,4 @@ for epoch in range(EPOCHS):
     print(f"Epoch {epoch+1} | Total train loss: {total_train_loss}")
     print(f"Epoch {epoch+1} | Train Loss: {total_train_loss / len(train_loader):.4f} | Val Loss: {val_loss:.4f}")
 
-torch.save(model.state_dict(), 'harm_model.pt')
+torch.save(model.state_dict(), 'baseline_model.pt')
