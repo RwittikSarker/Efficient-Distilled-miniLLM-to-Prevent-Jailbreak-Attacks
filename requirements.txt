@@ -7,7 +7,7 @@ sentencepiece>=0.2.0
 huggingface-hub>=0.25.0
 
 # --- Quantization support (Windows-friendly) ---
-bitsandbytes-windows>=0.43.1
+bitsandbytes-windows>=0.37.5
 
 # --- Datasets + Evaluation ---
 datasets>=2.18.0

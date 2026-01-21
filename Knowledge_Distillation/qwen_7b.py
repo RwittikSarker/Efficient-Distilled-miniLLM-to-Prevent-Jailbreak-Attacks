@@ -1,42 +1,32 @@
-# llama_8b.py (updated for attack model with progress)
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig, logging
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-# Enable info logging from Transformers
-logging.set_verbosity_info()
-
-def get_quant_config():
-    """Returns the BitsAndBytesConfig for 4-bit quantization."""
-    return BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_use_double_quant=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.bfloat16
-    )
-
-def load_attack_model():
-    print("--- Starting to load Attack Model (Qwen2.5-7B) ---")
-    quant_config = get_quant_config()
+def load_qwen_2_5_7b():
+    """
+    Loads the Qwen2.5-7B-Instruct model and tokenizer in BF16/FP16.
+    """
+    print("Loading Qwen/Qwen2.5-7B-Instruct in FP16/BF16 (Teacher)...")
     model_id = "Qwen/Qwen2.5-7B-Instruct"
 
-    print("Loading tokenizer...")
+    # Load tokenizer with left-padding (standard for generation/distillation)
     tokenizer = AutoTokenizer.from_pretrained(model_id)
-    print("Tokenizer loaded.")
     tokenizer.padding_side = "left"
     tokenizer.truncation_side = "left"
 
+    # Qwen tokenizers usually define pad_token, but keep this for safety
     if tokenizer.pad_token is None:
-      tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.pad_token = tokenizer.eos_token
 
-    print("Loading model (this may take a few minutes)...")
+    # Load model in BF16 (preferred on Ampere+ GPUs; use torch.float16 if needed)
     model = AutoModelForCausalLM.from_pretrained(
         model_id,
-        quantization_config=quant_config,
-        device_map="auto",  # Automatically use available GPUs
-        low_cpu_mem_usage=True,  # Reduce memory spikes
+        device_map="cuda",
+        torch_dtype=torch.bfloat16
     )
-    print("--- Attack Model Loaded Successfully ---")
+
     return model, tokenizer
 
+
 if __name__ == "__main__":
-    model, tokenizer = load_attack_model()
+    model, tokenizer = load_qwen_2_5_7b()
+    print("✅ Teacher Model (Qwen2.5-7B) loaded successfully")

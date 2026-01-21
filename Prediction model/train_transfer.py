@@ -5,8 +5,10 @@ from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
 from transformers import RobertaTokenizer, RobertaModel, get_linear_schedule_with_warmup
 from torch.optim import AdamW
-#from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report
+import numpy as np
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from scipy.stats import spearmanr, pearsonr
+
 
 # --- Import your custom model and dataset classes ---
 from harm_model import HarmScoringModel
@@ -18,7 +20,7 @@ from utils import PromptDataset
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # --- File Paths ---
-JIGSAW_DATA_PATH = "train.csv"
+JIGSAW_DATA_PATH = "jigsaw.csv"
 #HARMSCORE_DATA_PATH = "data.csv" 
 INTERMEDIATE_MODEL_PATH = "roberta-toxic.pt"
 FINAL_MODEL_PATH = "transfer_learning_model.pt"
@@ -29,7 +31,7 @@ LR_JIGSAW = 2e-5
 BATCH_SIZE_JIGSAW = 16 
 
 # --- Stage 2: Harmscore Training Hyperparameters (Matching your train.py) ---
-EPOCHS_FINAL = 7
+EPOCHS_FINAL = 4
 LR_FINAL = 1e-5
 BATCH_SIZE_FINAL = 12
 
@@ -87,7 +89,9 @@ class ToxicityClassifierModel(nn.Module):
 def evaluate_final(model, val_loader, loss_fn, epoch):
     model.eval()
     total_loss = 0
-    all_labels, all_preds = [], []
+
+    all_labels = []
+    all_preds = []
 
     with torch.no_grad():
         for batch in val_loader:
@@ -98,23 +102,61 @@ def evaluate_final(model, val_loader, loss_fn, epoch):
             outputs = model(input_ids, attention_mask)
             loss = loss_fn(outputs, labels)
             total_loss += loss.item()
-            
-            preds_probs = torch.sigmoid(outputs)
-            all_labels.extend(labels.cpu().numpy())
-            all_preds.extend(preds_probs.cpu().numpy())
 
-    print(f"\n--- Classification Report for Epoch {epoch+1} ---")
+            preds = torch.sigmoid(outputs)
+            all_labels.extend(labels.cpu().numpy())
+            all_preds.extend(preds.cpu().numpy())
+
+    y_true = np.array(all_labels)
+    y_pred = np.array(all_preds)
+
+    mae = mean_absolute_error(y_true, y_pred)
+    rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+    r2 = r2_score(y_true, y_pred)
+    spearman = spearmanr(y_true, y_pred).correlation
+    pearson = pearsonr(y_true, y_pred)[0]
+
+    print(f"\n--- Regression Metrics (Epoch {epoch+1}) ---")
+    print(f"MAE      : {mae:.4f}")
+    print(f"RMSE     : {rmse:.4f}")
+    print(f"R²       : {r2:.4f}")
+    print(f"Spearman : {spearman:.4f}")
+    print(f"Pearson  : {pearson:.4f}")
+
     bins = [-0.1, 0.3, 0.6, 1.1]
-    class_names = ['low', 'mid', 'high']
-    true_classes = pd.cut(all_labels, bins=bins, labels=class_names, ordered=False).fillna('low')
-    pred_classes = pd.cut(all_preds, bins=bins, labels=class_names, ordered=False).fillna('low')
-    
-    report = classification_report(true_classes, pred_classes, target_names=class_names, zero_division=0)
-    print(report)
+    bin_names = ['low', 'mid', 'high']
+
+    df = pd.DataFrame({
+        "y_true": y_true,
+        "y_pred": y_pred,
+        "bin": pd.cut(y_true, bins=bins, labels=bin_names)
+    })
+
+    df["abs_error"] = np.abs(df.y_true - df.y_pred)
+    df["signed_error"] = df.y_pred - df.y_true
+
+    print("\n--- Error by Harm Level (Ground Truth Bins) ---")
+    print(
+        df.groupby("bin").agg(
+            count=("y_true", "count"),
+            MAE=("abs_error", "mean"),
+            RMSE=("abs_error", lambda x: np.sqrt(np.mean(x ** 2))),
+            Mean_True=("y_true", "mean"),
+            Mean_Pred=("y_pred", "mean"),
+            Bias=("signed_error", "mean")
+        )
+    )
+
+    high_df = df[df["bin"] == "high"]
+    if len(high_df) > 0:
+        under_rate = np.mean(high_df.y_pred < 0.6)
+        mean_under = np.mean(high_df.y_true - high_df.y_pred)
+        print("\nHigh-harm underestimation rate:", round(under_rate, 3))
+        print("Mean underestimation magnitude:", round(mean_under, 4))
+
     print("--------------------------------------------------\n")
-    
-    avg_val_loss = total_loss / len(val_loader)
-    return avg_val_loss
+
+    return total_loss / len(val_loader)
 
 # ==============================================================================
 # --- MAIN EXECUTION SCRIPT ---
@@ -180,17 +222,6 @@ if __name__ == "__main__":
     print("      STAGE 2: FINAL FINE-TUNING ON HARMSCORE DATA")
     print("="*50 + "\n")
 
-    # try:
-    #     harmscore_df = pd.read_csv(HARMSCORE_DATA_PATH)
-    #     harmscore_df['harm_category'] = pd.cut(harmscore_df['harmscore'], bins=[-0.1, 0.3, 0.6, 1.1], labels=['low', 'mid', 'high'])
-    # except FileNotFoundError:
-    #     print(f"FATAL ERROR: Harmscore data not found at '{HARMSCORE_DATA_PATH}'.")
-    #     exit()
-
-    # train_df, val_df = train_test_split(
-    #     harmscore_df, test_size=0.1, random_state=42, stratify=harmscore_df['harm_category']
-    # )
-    # In train_transfer.py (inside STAGE 2)
 
     # Load pre-split data
     print("Loading pre-split training and validation data...")
