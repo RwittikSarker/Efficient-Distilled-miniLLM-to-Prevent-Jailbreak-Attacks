@@ -21,7 +21,6 @@ DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # --- File Paths ---
 JIGSAW_DATA_PATH = "jigsaw.csv"
-#HARMSCORE_DATA_PATH = "data.csv" 
 INTERMEDIATE_MODEL_PATH = "roberta-toxic.pt"
 FINAL_MODEL_PATH = "transfer_learning_model.pt"
 
